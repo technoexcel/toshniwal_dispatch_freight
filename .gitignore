@@ -1,7 +1,3 @@
-# Real deployed Apps Script Web App URL — semi-secret, never commit it.
-# Copy config.example.js to config.js and paste your own URL in locally.
-config.js
-
 # OS junk
 .DS_Store
 Thumbs.db
