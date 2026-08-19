@@ -5,7 +5,7 @@
 // never be committed. It looks like:
 //   https://script.google.com/macros/s/AKfycb.../exec
 // ============================================================================
-const API_URL = 'PASTE_UNIFIED_APP_WEB_APP_URL_HERE';
+const API_URL = 'https://script.google.com/macros/s/AKfycby7NOMTNks_8dPxOabaxG8arR2xG5FWkKze3deWXJltUZRoofHMKV2Zl47Ca9hJ0yfpfw/exec';
 
 // ---------------------------------------------------------------------------
 // Session storage (kept in localStorage so the user stays logged in across
