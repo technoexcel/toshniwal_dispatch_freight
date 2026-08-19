@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Toshniwal Dispatch + Freight Tracker</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-wrap">
+      <form id="loginForm" class="login-card">
+        <div class="brand-row">
+          <img src="logo.png" class="brand-logo" alt="" onerror="this.style.display='none'">
+          <h1>Toshniwal Dispatch + Freight Tracker</h1>
+        </div>
+        <p class="login-sub">Sign in to continue</p>
+        <label>Username <input name="username" required autocomplete="username"></label>
+        <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+        <div id="loginError" class="login-error"></div>
+        <button type="submit">Log In</button>
+      </form>
+
+      <div class="login-gallery">
+        <img src="assets/login-bg-1.jpg" alt="">
+        <img src="assets/login-bg-2.jpg" alt="">
+        <img src="assets/login-bg-3.jpg" alt="">
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN APP (hidden until logged in) -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div class="brand-row">
+        <img src="logo.png" class="brand-logo brand-logo-topbar" alt="" onerror="this.style.display='none'">
+        <h1>Toshniwal Dispatch + Freight Tracker</h1>
+      </div>
+      <nav id="tabs">
+        <button class="tab-btn active" data-tab="dashboard" data-roles="SuperAdmin,DODispatch">Dashboard</button>
+        <button class="tab-btn" data-tab="addDo" data-roles="SuperAdmin,DODispatch">Add DO</button>
+        <button class="tab-btn" data-tab="dispatch" data-roles="SuperAdmin,DODispatch">Dispatch Entry</button>
+        <button class="tab-btn" data-tab="yardOut" data-roles="SuperAdmin,DODispatch">Yard Out</button>
+        <button class="tab-btn" data-tab="freightQueue" data-roles="SuperAdmin,Freight">Freight Queue</button>
+        <button class="tab-btn" data-tab="freightLedger" data-roles="SuperAdmin,Freight">Freight Ledger</button>
+        <button class="tab-btn" data-tab="reports" data-roles="SuperAdmin,DODispatch,Freight">Reports</button>
+        <button class="tab-btn" data-tab="account" data-roles="SuperAdmin,DODispatch,Freight">Account</button>
+      </nav>
+      <div class="whoami">
+        <span id="whoamiText"></span>
+        <button id="btnLogout" class="logout-btn">Log Out</button>
+      </div>
+    </header>
+
+    <div id="toast"></div>
+
+    <main>
+      <!-- DASHBOARD -->
+      <section id="tab-dashboard" class="tab-panel active">
+        <div class="cards" id="summaryCards"></div>
+        <div class="cards" id="summaryCardsFreight" data-roles="SuperAdmin"></div>
+
+        <div class="charts-grid">
+          <div class="chart-card">
+            <div class="chart-title">DO Status Breakdown</div>
+            <div class="chart-sub">All delivery orders, by current status</div>
+            <div id="statusChart"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Outstanding Balance by Mine</div>
+            <div class="chart-sub">Top mines by unlifted quantity (MT)</div>
+            <div id="mineChart"></div>
+          </div>
+        </div>
+
+        <div class="charts-grid charts-grid-3" style="margin-top:16px;">
+          <div class="chart-card">
+            <div class="chart-title">Dispatch Trend</div>
+            <div class="chart-sub">Trips and quantity, last 14 days — same dates, separate scales</div>
+            <div id="tripsChart"></div>
+            <div id="trendChart"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Yard In vs Out</div>
+            <div class="chart-sub">Cumulative movement by yard (MT)</div>
+            <div id="yardChart"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Yard Out by Material</div>
+            <div class="chart-sub">What's actually leaving the yard — Coal / Chura / Stone (MT)</div>
+            <div id="yardMaterialChart"></div>
+          </div>
+        </div>
+
+        <h2>DO Register</h2>
+        <div class="report-tools">
+          <label>Source
+            <select id="doFilterSource"><option value="">All</option></select>
+          </label>
+          <label>Mode
+            <select id="doFilterMode"><option value="">All</option><option>Road</option><option>Rail</option></select>
+          </label>
+          <label>Area
+            <select id="doFilterArea"><option value="">All</option></select>
+          </label>
+          <label>Status
+            <select id="doFilterStatus">
+              <option value="">All</option>
+              <option value="Active">Active (incl. Expiring Soon)</option>
+              <option value="Expiring Soon">Expiring Soon only</option>
+              <option value="Expired">Expired</option>
+              <option value="Completed">Completed</option>
+              <option value="Sold">Sold</option>
+            </select>
+          </label>
+          <button type="button" id="btnExportDoExcel">Export Excel</button>
+          <button type="button" id="btnExportDoPdf">Export PDF</button>
+        </div>
+        <div class="table-wrap scroll-tall">
+          <table id="doTable">
+            <thead>
+              <tr>
+                <th>DO No.</th><th>Source</th><th>Mode</th><th>Area</th><th>Status</th><th>Mine</th><th>Grade</th><th>Book Qty</th>
+                <th>Lifted</th><th>Balance</th><th>Bid</th><th>Basic Price</th><th>GST18</th><th>IncPF50</th><th>Net Rate</th>
+                <th>Valid Up To</th><th>Days Left</th><th>Sold to Party</th><th>Transporter</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <h2>Yard Stock</h2>
+        <div class="table-wrap">
+          <table id="yardTable">
+            <thead><tr><th>Yard</th><th>In</th><th>Out</th><th>Balance</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ADD DO -->
+      <section id="tab-addDo" class="tab-panel">
+        <div class="section-head"><div class="icon-badge b-add"></div><h2 style="margin:0">Add Delivery Order (DO)</h2></div>
+
+        <div class="edit-banner" id="doEditBanner">
+          <span>✏️ Editing DO <b id="doEditLabel"></b> — changes will update this DO, not create a new one.</span>
+          <button type="button" id="btnCancelDoEdit">Cancel Edit</button>
+        </div>
+
+        <form id="doForm" class="form-grid">
+          <input type="hidden" name="editingDoNo" value="">
+          <label>Source
+            <select name="Source" id="doSource"></select>
+          </label>
+          <label>Mode
+            <select name="Mode">
+              <option>Road</option><option>Rail</option>
+            </select>
+          </label>
+          <label>GST State <input name="GST_State" placeholder="e.g. TS"></label>
+          <label>DO No. <input name="DO_No" required></label>
+          <label>DO Date <input type="date" name="DO_Date" required></label>
+          <div class="field-with-add">
+            <label>Area
+              <input list="areasList" name="Area">
+              <datalist id="areasList"></datalist>
+            </label>
+            <button type="button" class="btn-quick-add" data-quick-add="Areas" title="Add new area">+</button>
+          </div>
+          <div class="field-with-add">
+            <label>Mine
+              <input list="minesList" name="Mine" required>
+              <datalist id="minesList"></datalist>
+            </label>
+            <button type="button" class="btn-quick-add" data-quick-add="Mines" title="Add new mine">+</button>
+          </div>
+          <label>Trader Purchased (if any) <input name="TraderPurchased"></label>
+          <div class="field-with-add">
+            <label>Grade
+              <input list="gradesList" name="Grade">
+              <datalist id="gradesList"></datalist>
+            </label>
+            <button type="button" class="btn-quick-add" data-quick-add="Grades" title="Add new grade">+</button>
+          </div>
+          <label>Book Qty (MT) <input type="number" step="0.01" name="BookQty" required></label>
+          <label>Bid (Rs) <input type="number" step="0.01" name="Bid"></label>
+          <label>Basic Price (Rs) <input type="number" step="0.01" name="BasicPrice" id="basicPriceInput" required></label>
+          <label>Valid Up To <input type="date" name="ValidUpTo" required></label>
+          <div class="field-with-add">
+            <label>Transport Name
+              <input list="transportersList" name="TransportName">
+              <datalist id="transportersList"></datalist>
+            </label>
+            <button type="button" class="btn-quick-add" data-quick-add="Transporters" title="Add new transporter">+</button>
+          </div>
+          <label>Sold?
+            <select name="Sold" id="doSoldSelect"><option>No</option><option>Yes</option></select>
+          </label>
+          <label id="soldToPartyLabel" class="hidden">Sold to Party <input name="SoldToParty"></label>
+          <label>Refund Expected
+            <select name="RefundExpected"><option value="">-</option><option>Yes</option><option>No</option></select>
+          </label>
+          <label>Refund Received
+            <select name="RefundReceived"><option value="">-</option><option>Yes</option><option>No</option></select>
+          </label>
+          <label>EMD Forfeiture
+            <select name="EMDForfeiture"><option value="">-</option><option>Yes</option><option>No</option></select>
+          </label>
+          <label class="full">Notes <input name="Notes"></label>
+
+          <div class="rate-preview full" id="ratePreview">
+            Enter Basic Price to preview GST18 / IncPF50 / Net Rate →
+          </div>
+
+          <div class="full form-actions">
+            <button type="submit" id="doSubmitBtn">Save DO</button>
+            <button type="button" class="btn-reset" id="btnResetDo">Reset</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- DISPATCH ENTRY -->
+      <section id="tab-dispatch" class="tab-panel">
+        <div class="section-head"><div class="icon-badge b-truck"></div><h2 style="margin:0">Dispatch Entry (Truck Trip)</h2></div>
+
+        <div class="edit-banner" id="dispatchEditBanner">
+          <span>✏️ Editing dispatch <b id="dispatchEditLabel"></b> — changes will update this trip, not create a new one.</span>
+          <button type="button" id="btnCancelDispatchEdit">Cancel Edit</button>
+        </div>
+
+        <form id="dispatchForm" class="form-grid">
+          <input type="hidden" name="editingTripId" value="">
+          <label class="full">Source
+            <select name="SourceType" id="dispatchSourceType">
+              <option value="Mine">Mine (DO-linked)</option>
+              <option value="OtherParty">Other Party / Trader / Import (no DO)</option>
+            </select>
+          </label>
+
+          <div class="full" id="dispatchMineFields">
+            <label class="full">DO
+              <select name="DO_No" id="dispatchDoSelect"></select>
+            </label>
+            <div class="do-info full" id="dispatchDoInfo"></div>
+            <div class="meter-card full hidden" id="dispatchMeterCard">
+              <div class="meter-label"><span>Lifted so far</span><span id="meterText"></span></div>
+              <div class="meter-track"><div class="meter-fill" id="meterFill" style="width:0%"></div></div>
+              <div class="meter-footer"><span id="meterAfterText"></span><span id="meterDaysLeft"></span></div>
+            </div>
+          </div>
+          <div class="field-with-add full hidden" id="dispatchOtherPartyField">
+            <label>Source Party (trader / importer / other)
+              <input list="otherPartiesList" name="SourceParty">
+              <datalist id="otherPartiesList"></datalist>
+            </label>
+            <button type="button" class="btn-quick-add" data-quick-add="OtherParties" title="Add new party">+</button>
+          </div>
+
+          <label>Date <input type="date" name="Date" required></label>
+          <label>Challan No. <input name="ChallanNo"></label>
+          <label>Document No. <input name="DocumentNo"></label>
+          <label>Truck No. <input name="TruckNo" required></label>
+          <label>Qty (MT) <input type="number" step="0.01" name="Qty" id="dispatchQtyInput" required></label>
+          <label>Destination
+            <select name="DestType" id="destType">
+              <option value="Customer">Customer (direct)</option>
+              <option value="Yard">Yard (own stock)</option>
+            </select>
+          </label>
+          <div class="field-with-add">
+            <label>Customer / Yard Name
+              <input list="customersList" name="Customer" required>
+              <datalist id="customersList"></datalist>
+            </label>
+            <button type="button" class="btn-quick-add" data-quick-add="Customers" title="Add new customer">+</button>
+          </div>
+          <label>Sale Rate (Rs, if direct sale) <input type="number" step="0.01" name="SaleRate"></label>
+          <label>Freight Applicable?
+            <select name="FreightApplicable">
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </label>
+          <label class="full">Remarks <input name="Remarks"></label>
+          <label class="full">Truck Photo (optional)
+            <input type="file" accept="image/*" capture="environment" id="truckPhotoInput">
+          </label>
+          <div class="media-strip full" id="dispatchMediaStrip"></div>
+          <div class="full form-actions">
+            <button type="submit" id="dispatchSubmitBtn">Save Dispatch</button>
+            <button type="button" class="btn-reset" id="btnResetDispatch">Reset</button>
+          </div>
+        </form>
+
+        <h2>Recent Dispatches</h2>
+        <div class="table-wrap scroll-tall">
+          <table id="recentDispatchTable">
+            <thead><tr><th>Date</th><th>DO No.</th><th>Truck</th><th>Qty</th><th>Dest</th><th>Customer</th><th>Amount</th><th></th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- YARD OUT -->
+      <section id="tab-yardOut" class="tab-panel">
+        <div class="section-head"><div class="icon-badge b-yard"></div><h2 style="margin:0">Yard Movements</h2></div>
+
+        <h2>Current Yard Stock</h2>
+        <div class="chart-card" style="margin-bottom:20px;">
+          <div id="yardOutChart"></div>
+        </div>
+
+        <p class="report-card-sub">Yard-In entries are no longer entered here — every yard-in movement (from a Mine/DO or from an Other
+          Party/trader) now goes through <b>Dispatch Entry</b>, with Destination set to "Yard (own stock)". This tab is for material
+          leaving the yard only.</p>
+
+        <h2>Yard Out Entry (Yard → Customer)</h2>
+        <form id="yardOutForm" class="form-grid">
+          <label>Date <input type="date" name="Date" required></label>
+          <div class="field-with-add">
+            <label>Yard
+              <input list="yardsList" name="Yard" value="Main Yard">
+              <datalist id="yardsList"></datalist>
+            </label>
+            <button type="button" class="btn-quick-add" data-quick-add="Yards" title="Add new yard">+</button>
+          </div>
+          <label>Truck No. <input name="TruckNo" required></label>
+          <label>Qty (MT) <input type="number" step="0.01" name="Qty" required></label>
+          <label>Material
+            <select name="Material" id="yardOutMaterial"></select>
+          </label>
+          <div class="field-with-add">
+            <label>Customer
+              <input list="customersList2" name="Customer" required>
+              <datalist id="customersList2"></datalist>
+            </label>
+            <button type="button" class="btn-quick-add" data-quick-add="Customers" title="Add new customer">+</button>
+          </div>
+          <label>Challan No. <input name="ChallanNo"></label>
+          <label>Document No. <input name="DocumentNo"></label>
+          <label>Freight Applicable?
+            <select name="FreightApplicable">
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </label>
+          <label class="full">Remarks <input name="Remarks"></label>
+          <div class="full form-actions">
+            <button type="submit">Save Yard Out</button>
+            <button type="reset" class="btn-reset">Reset</button>
+          </div>
+        </form>
+
+        <h2>Yard Ledger</h2>
+        <div class="table-wrap scroll-tall">
+          <table id="yardLedgerTable">
+            <thead><tr><th>Date</th><th>Type</th><th>Yard</th><th>Party</th><th>Party Type</th><th>Truck</th><th>Qty</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- REPORTS -->
+      <section id="tab-reports" class="tab-panel">
+        <h2>Reports</h2>
+        <div class="report-picker">
+          <label class="report-picker-field">Choose a report
+            <select id="reportTypeSelect"></select>
+          </label>
+
+          <div id="reportParams" class="report-picker-params">
+            <label class="report-picker-field" data-param="doStatement">DO <select id="reportDoSelect"></select></label>
+            <label class="report-picker-field" data-param="customerWise">Customer
+              <input list="reportCustomerList" id="reportCustomerInput" placeholder="Type a customer name">
+              <datalist id="reportCustomerList"></datalist>
+            </label>
+            <label class="report-picker-field" data-param="mineWise">Mine
+              <input list="minesList" id="reportMineInput" placeholder="Type a mine name">
+            </label>
+            <label class="report-picker-field" data-param="dispatchRange">From <input type="date" id="reportDispatchFrom"></label>
+            <label class="report-picker-field" data-param="dispatchRange">To <input type="date" id="reportDispatchTo"></label>
+            <label class="report-picker-field" data-param="dispatchRange">Movement Type
+              <select id="reportDispatchMovementType">
+                <option value="">All</option>
+                <option>Mine → Customer</option>
+                <option>Mine → Yard</option>
+                <option>Yard → Customer</option>
+                <option>Other Party → Yard</option>
+                <option>Other Party → Customer</option>
+              </select>
+            </label>
+            <label class="report-picker-field" data-param="yardStockRange">From <input type="date" id="reportYardFrom"></label>
+            <label class="report-picker-field" data-param="yardStockRange">To <input type="date" id="reportYardTo"></label>
+            <label class="report-picker-field" data-param="entityLedger">Entity <select id="reportEntity"></select></label>
+            <label class="report-picker-field" data-param="entityLedger">From <input type="date" id="reportEntityFrom"></label>
+            <label class="report-picker-field" data-param="entityLedger">To <input type="date" id="reportEntityTo"></label>
+            <label class="report-picker-field" data-param="masterFreight">From (optional) <input type="date" id="reportMasterFrom"></label>
+            <label class="report-picker-field" data-param="masterFreight">To (optional) <input type="date" id="reportMasterTo"></label>
+            <label class="report-picker-field" data-param="combined">From <input type="date" id="reportCombinedFrom"></label>
+            <label class="report-picker-field" data-param="combined">To <input type="date" id="reportCombinedTo"></label>
+          </div>
+
+          <button id="btnViewReport" class="report-card-btn">View Report</button>
+        </div>
+
+        <h2 id="reportResultTitle">Currently viewing: DO-wise Statement</h2>
+        <div class="report-tools">
+          <button type="button" id="btnExportReportExcel">Export Excel</button>
+          <button type="button" id="btnExportReportPdf">Export PDF</button>
+        </div>
+        <div id="reportResultExtra"></div>
+        <div class="table-wrap scroll-tall">
+          <table id="reportTable">
+            <thead id="reportTableHead"></thead>
+            <tbody id="reportTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===== FREIGHT QUEUE ===== -->
+      <section id="tab-freightQueue" class="tab-panel">
+        <div class="section-head" style="justify-content:space-between; display:flex; align-items:center;">
+          <h2 style="margin:0">Freight Queue</h2>
+          <button type="button" id="btnAddStandaloneFreight">+ Add Freight Record</button>
+        </div>
+        <p class="report-card-sub">Trips the DO Dispatch team flagged "Freight Applicable = Yes", waiting to be processed. Appears here the moment they save it — no separate sync step.
+          Freight that never went through Dispatch/Yard at all (e.g. paid before it was flagged, or for a movement outside this app) can be added directly with "+ Add Freight Record" — a Document No. is required for those so it still ties back to the physical movement.</p>
+        <div class="table-wrap scroll-tall">
+          <table id="queueTable">
+            <thead><tr><th>Date</th><th>Document No.</th><th>Type</th><th>Mine/Yard</th><th>Party</th><th>Truck</th><th>Qty</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===== PROCESS FREIGHT (modal — also used for standalone/manual entry) ===== -->
+      <div class="modal-overlay hidden" id="processOverlay">
+        <div class="modal-box" style="max-width:640px">
+          <h3>Process Freight — <span id="processTripLabel"></span></h3>
+          <form id="processForm" class="form-grid">
+            <div class="full hidden" id="processManualFields">
+              <label class="full"><strong>Movement details (no linked Dispatch/Yard trip)</strong></label>
+              <label>Date <input type="date" name="ManualDate"></label>
+              <label>Document No. <input name="ManualDocumentNo" placeholder="Required for a standalone record"></label>
+              <label>Truck No. <input name="ManualTruckNo"></label>
+              <label>Qty (MT) <input type="number" step="0.01" name="ManualQty" id="processManualQty"></label>
+              <label>Mine / Yard / Source <input name="ManualMineYard"></label>
+              <label>Party (customer / other party) <input name="ManualParty"></label>
+            </div>
+            <label class="full">Transporter (primary)
+              <input list="transportersList" name="Transporter">
+            </label>
+            <label>Entity (who pays)
+              <select name="Entity" id="processEntity" required></select>
+            </label>
+            <label>POD Received?
+              <select name="PODReceived">
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
+            </label>
+
+            <label class="full"><strong>Payee (truck owner / driver being paid)</strong></label>
+            <label>Payee Name <input name="PayeeName" required></label>
+            <label>Payee Phone <input name="PayeePhone"></label>
+            <label>Account No. <input name="PayeeAccountNo"></label>
+            <label>IFSC <input name="PayeeIFSC"></label>
+
+            <label class="full"><strong>Gross Payable</strong></label>
+            <label>Freight Rate (₹/MT) <input type="number" step="0.01" name="FreightRate" id="processFreightRate" required></label>
+            <label>Toll (₹) <input type="number" step="0.01" name="Toll" value="0"></label>
+            <label>Hamali — Loading/Unloading (₹) <input type="number" step="0.01" name="Hamali" value="0"></label>
+            <label>Waiting Charges (₹) <input type="number" step="0.01" name="WaitingCharges" value="0"></label>
+            <label>Misc (₹) <input type="number" step="0.01" name="Misc" value="0"></label>
+            <div class="full" id="processGrossPreview"></div>
+
+            <label class="full">Remarks <input name="Remarks"></label>
+            <div class="full form-actions">
+              <button type="submit">Save Freight Record</button>
+              <button type="button" class="btn-reset" id="btnCancelProcess">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ===== FREIGHT LEDGER ===== -->
+      <section id="tab-freightLedger" class="tab-panel">
+        <h2>Freight Ledger</h2>
+        <div class="report-tools">
+          <label>Document No.
+            <input type="search" id="ledgerFilterDocNo" placeholder="Search Document No.">
+          </label>
+          <label>Truck No.
+            <input type="search" id="ledgerFilterTruckNo" placeholder="Search Truck No.">
+          </label>
+          <label>Status
+            <select id="ledgerFilterStatus">
+              <option value="">All</option>
+              <option value="Pending">Pending</option>
+              <option value="Partially Paid">Partially Paid</option>
+              <option value="Fully Paid">Fully Paid</option>
+            </select>
+          </label>
+          <label>Entity
+            <select id="ledgerFilterEntity">
+              <option value="">All</option>
+              <option value="TRL">TRL</option>
+              <option value="TL">TL</option>
+            </select>
+          </label>
+          <label>From
+            <input type="date" id="ledgerFilterFrom">
+          </label>
+          <label>To
+            <input type="date" id="ledgerFilterTo">
+          </label>
+          <button type="button" id="btnExportLedgerExcel">Export Excel</button>
+        </div>
+        <div class="table-wrap scroll-tall">
+          <table id="ledgerTable">
+            <thead><tr><th>Date</th><th>Document No.</th><th>Entity</th><th>Payee</th><th>Transporter</th><th>Truck</th><th>Net Payable</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===== FREIGHT DETAIL (modal — add deductions/payments) ===== -->
+      <div class="modal-overlay hidden" id="detailOverlay">
+        <div class="modal-box" style="max-width:720px">
+          <h3 id="detailTitle"></h3>
+          <div id="detailSummary"></div>
+
+          <h4>Additions</h4>
+          <p class="report-card-sub">Extra charges discovered after this record was created — Loading/Unloading, Hamali, Toll, Halting, Misc, etc. Adds on top of the Gross Payable.</p>
+          <table class="mini-table" id="additionsTable">
+            <thead><tr><th>Reason</th><th>Amount</th><th>Remarks</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <form id="addAdditionForm" class="form-grid" style="margin-top:8px">
+            <label>Reason <select name="Reason" id="additionReasonSelect"></select></label>
+            <label>Amount (₹) <input type="number" step="0.01" name="Amount" required></label>
+            <label class="full">Remarks <input name="Remarks"></label>
+            <div class="full form-actions"><button type="submit">Add Addition</button></div>
+          </form>
+
+          <h4>Deductions</h4>
+          <table class="mini-table" id="deductionsTable">
+            <thead><tr><th>Reason</th><th>Amount</th><th>Remarks</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <form id="addDeductionForm" class="form-grid" style="margin-top:8px">
+            <label>Reason <select name="Reason" id="deductionReasonSelect"></select></label>
+            <label>Amount (₹) <input type="number" step="0.01" name="Amount" required></label>
+            <label class="full">Remarks <input name="Remarks"></label>
+            <div class="full form-actions"><button type="submit">Add Deduction</button></div>
+          </form>
+
+          <h4>Payments</h4>
+          <table class="mini-table" id="paymentsTable">
+            <thead><tr><th>Reason</th><th>Amount</th><th>Date</th><th>Mode</th><th>UTR / Ref No.</th><th>Remarks</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <form id="addPaymentForm" class="form-grid" style="margin-top:8px">
+            <label>Reason <select name="Reason" id="paymentReasonSelect"></select></label>
+            <label>Amount (₹) <input type="number" step="0.01" name="Amount" required></label>
+            <label>Date <input type="date" name="Date" required></label>
+            <label>Mode
+              <select name="Mode">
+                <option value="">Select mode</option>
+                <option value="NEFT">NEFT</option>
+                <option value="RTGS">RTGS</option>
+                <option value="UPI">UPI</option>
+                <option value="Cash">Cash</option>
+                <option value="Cheque">Cheque</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+            <label>UTR / Ref No. <input name="RefNo" placeholder="Transaction reference number"></label>
+            <label class="full">Remarks <input name="Remarks" placeholder="e.g. account number, or any other note"></label>
+            <div class="full form-actions"><button type="submit">Add Payment</button></div>
+          </form>
+
+          <div class="full form-actions" style="margin-top:12px">
+            <button type="button" class="btn-reset" id="btnCloseDetail">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCOUNT / ADMIN -->
+      <section id="tab-account" class="tab-panel">
+        <div class="account-top-row">
+          <div class="account-col">
+            <div class="section-head"><div class="icon-badge b-user"></div><h2 style="margin:0">Change Password</h2></div>
+            <form id="changePasswordForm" class="form-grid">
+              <label>Current Password <input type="password" name="oldPassword" placeholder="Enter your current password" required></label>
+              <label>New Password <input type="password" name="newPassword" placeholder="At least 4 characters" required minlength="4"></label>
+              <div class="full form-actions">
+                <button type="submit">Update Password</button>
+                <button type="reset" class="btn-reset">Reset</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="account-col hidden" data-roles="SuperAdmin">
+            <div class="section-head"><div class="icon-badge b-user"></div><h2 style="margin:0">Super Admin — Manage Users</h2></div>
+            <form id="addUserForm" class="form-grid">
+              <label>Username <input name="username" placeholder="e.g. rsaini" required></label>
+              <label>Password <input name="password" type="password" placeholder="At least 4 characters" required minlength="4"></label>
+              <label>Role
+                <select name="role">
+                  <option value="DODispatch">DO Dispatch (yard/dispatch entry &amp; reports)</option>
+                  <option value="Freight">Freight (freight queue, ledger &amp; reports)</option>
+                  <option value="SuperAdmin">Super Admin (full access)</option>
+                </select>
+              </label>
+              <div class="full form-actions">
+                <button type="submit">Add User</button>
+                <button type="reset" class="btn-reset">Reset</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div id="adminPanel" class="hidden" data-roles="SuperAdmin">
+          <h3>Existing Users</h3>
+          <div class="table-wrap">
+            <table id="usersTable">
+              <thead><tr><th>Username</th><th>Role</th><th>Created</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="section-head"><div class="icon-badge b-log"></div><h2 style="margin:0">Audit Log</h2></div>
+          <div class="account-card">
+            <p class="report-card-sub">Every DO/dispatch/yard edit, freight record change, user addition, and password change — who did what, and when.</p>
+            <div class="table-wrap scroll-tall">
+              <table id="auditLogTable">
+                <thead><tr><th>When</th><th>User</th><th>Action</th><th>Record Type</th><th>Record ID</th><th>Details</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="vizTooltip" class="viz-tooltip"></div>
+
+  <!-- Reusable quick-add modal (for Mines/Grades/Customers/Transporters) -->
+  <div class="modal-overlay hidden" id="quickAddOverlay">
+    <div class="modal-box">
+      <h3 id="quickAddTitle">Add new</h3>
+      <form id="quickAddForm">
+        <label>Name
+          <input name="value" id="quickAddInput" required autofocus>
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn-cancel" id="btnQuickAddCancel">Cancel</button>
+          <button type="submit" class="btn-save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Media viewer modal (truck / mine / site photos) -->
+  <div class="modal-overlay hidden" id="mediaViewerOverlay">
+    <div class="modal-box media-viewer-box">
+      <h3 id="mediaViewerTitle">Photos</h3>
+      <div id="mediaViewerGrid" class="media-viewer-grid"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-cancel" id="btnMediaViewerClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
