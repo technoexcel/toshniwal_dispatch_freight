@@ -5,7 +5,7 @@
 // modules. It looks like:
 //   https://script.google.com/macros/s/AKfycb.../exec
 // ============================================================================
-const API_URL = 'https://script.google.com/macros/s/AKfycby7NOMTNks_8dPxOabaxG8arR2xG5FWkKze3deWXJltUZRoofHMKV2Zl47Ca9hJ0yfpfw/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyZiSWQPQ_w26Azs6DbtirdFaY4VhS9rFLbb2y252nJpeHFwQ5wz8dbCUob8qZSAVmOAA/exec';
 
 // ---------------------------------------------------------------------------
 // Session storage (kept in localStorage so the user stays logged in across

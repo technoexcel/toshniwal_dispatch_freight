@@ -63,6 +63,43 @@
         <div class="cards" id="summaryCards"></div>
         <div class="cards" id="summaryCardsFreight" data-roles="SuperAdmin"></div>
 
+        <h2>DO Register</h2>
+        <div class="report-tools">
+          <label>Source
+            <select id="doFilterSource"><option value="">All</option></select>
+          </label>
+          <label>Mode
+            <select id="doFilterMode"><option value="">All</option><option>Road</option><option>Rail</option></select>
+          </label>
+          <label>Area
+            <select id="doFilterArea"><option value="">All</option></select>
+          </label>
+          <label>Status
+            <select id="doFilterStatus">
+              <option value="">All</option>
+              <option value="Active" selected>Active (incl. Expiring Soon)</option>
+              <option value="Expiring Soon">Expiring Soon only</option>
+              <option value="Expired">Expired</option>
+              <option value="Completed">Completed</option>
+              <option value="Sold">Sold</option>
+            </select>
+          </label>
+          <button type="button" id="btnExportDoExcel">Export Excel</button>
+          <button type="button" id="btnExportDoPdf">Export PDF</button>
+        </div>
+        <div class="table-wrap scroll-tall">
+          <table id="doTable">
+            <thead>
+              <tr>
+                <th>DO No.</th><th>Source</th><th>Mode</th><th>Area</th><th>Status</th><th>Mine</th><th>Grade</th><th>Book Qty</th>
+                <th>Lifted</th><th>Balance</th><th>Bid</th><th>Basic Price</th><th>GST18</th><th>IncPF50</th><th>Net Rate</th>
+                <th>Valid Up To</th><th>Days Left</th><th>Sold to Party</th><th>Transporter</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
         <div class="charts-grid">
           <div class="chart-card">
             <div class="chart-title">DO Status Breakdown</div>
@@ -95,42 +132,6 @@
           </div>
         </div>
 
-        <h2>DO Register</h2>
-        <div class="report-tools">
-          <label>Source
-            <select id="doFilterSource"><option value="">All</option></select>
-          </label>
-          <label>Mode
-            <select id="doFilterMode"><option value="">All</option><option>Road</option><option>Rail</option></select>
-          </label>
-          <label>Area
-            <select id="doFilterArea"><option value="">All</option></select>
-          </label>
-          <label>Status
-            <select id="doFilterStatus">
-              <option value="">All</option>
-              <option value="Active">Active (incl. Expiring Soon)</option>
-              <option value="Expiring Soon">Expiring Soon only</option>
-              <option value="Expired">Expired</option>
-              <option value="Completed">Completed</option>
-              <option value="Sold">Sold</option>
-            </select>
-          </label>
-          <button type="button" id="btnExportDoExcel">Export Excel</button>
-          <button type="button" id="btnExportDoPdf">Export PDF</button>
-        </div>
-        <div class="table-wrap scroll-tall">
-          <table id="doTable">
-            <thead>
-              <tr>
-                <th>DO No.</th><th>Source</th><th>Mode</th><th>Area</th><th>Status</th><th>Mine</th><th>Grade</th><th>Book Qty</th>
-                <th>Lifted</th><th>Balance</th><th>Bid</th><th>Basic Price</th><th>GST18</th><th>IncPF50</th><th>Net Rate</th>
-                <th>Valid Up To</th><th>Days Left</th><th>Sold to Party</th><th>Transporter</th><th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
         <h2>Yard Stock</h2>
         <div class="table-wrap">
           <table id="yardTable">
@@ -297,7 +298,7 @@
         <h2>Recent Dispatches</h2>
         <div class="table-wrap scroll-tall">
           <table id="recentDispatchTable">
-            <thead><tr><th>Date</th><th>DO No.</th><th>Truck</th><th>Qty</th><th>Dest</th><th>Customer</th><th>Amount</th><th></th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>DO No.</th><th>Truck</th><th>Qty</th><th>Dest</th><th>Customer</th><th>Amount</th><th></th><th></th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -393,6 +394,7 @@
             </label>
             <label class="report-picker-field" data-param="yardStockRange">From <input type="date" id="reportYardFrom"></label>
             <label class="report-picker-field" data-param="yardStockRange">To <input type="date" id="reportYardTo"></label>
+            <label class="report-picker-field" data-param="doBalanceAsOf">As of date <input type="date" id="reportDoBalanceAsOfDate"></label>
             <label class="report-picker-field" data-param="entityLedger">Entity <select id="reportEntity"></select></label>
             <label class="report-picker-field" data-param="entityLedger">From <input type="date" id="reportEntityFrom"></label>
             <label class="report-picker-field" data-param="entityLedger">To <input type="date" id="reportEntityTo"></label>
@@ -520,7 +522,7 @@
         </div>
         <div class="table-wrap scroll-tall">
           <table id="ledgerTable">
-            <thead><tr><th>Date</th><th>Document No.</th><th>Entity</th><th>Payee</th><th>Transporter</th><th>Truck</th><th>Net Payable</th><th>Paid</th><th>Balance</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Date</th><th>Document No.</th><th>Entity</th><th>Payee</th><th>Transporter</th><th>Truck</th><th>Net Payable</th><th>Paid</th><th>Balance</th><th>Status</th><th></th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>

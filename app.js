@@ -87,9 +87,15 @@ function enterApp() {
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   document.getElementById('whoamiText').textContent = Session.username + ' (' + Session.role + ')';
+
+  // setupTabs() must run BEFORE applyRoleVisibility() — the latter's fallback (switch off a tab
+  // that's hidden for this role) works by clicking the first visible tab button, which only does
+  // anything once setupTabs() has actually wired up a click handler on it. Calling it in the
+  // other order left the Dashboard PANEL showing (its "active" class from the raw HTML) for a
+  // role whose Dashboard NAV BUTTON was correctly hidden — the button vanished, the content didn't.
+  setupTabs();
   applyRoleVisibility();
 
-  setupTabs();
   setupDateDefaults();
   loadMasters();
   if (DO_ROLES.indexOf(Session.role) !== -1) loadDashboard();
@@ -404,7 +410,8 @@ function renderDoTable() {
       <td>${d.DaysLeft != null ? d.DaysLeft : ''}</td>
       <td>${escapeHtml(d.SoldToParty)}</td>
       <td>${escapeHtml(d.TransportName)}</td>
-      <td>${Session.role === 'SuperAdmin' ? `<button class="btn-row-edit" data-edit-do="${escapeHtml(d.DO_No)}">Edit</button>` : ''}</td>
+      <td>${Session.role === 'SuperAdmin' ? `<button class="btn-row-edit" data-edit-do="${escapeHtml(d.DO_No)}">Edit</button>
+        <button class="btn-row-edit" data-delete-do="${escapeHtml(d.DO_No)}">Delete</button>` : ''}</td>
     </tr>
   `).join('') || '<tr><td colspan="20">No DOs match this filter</td></tr>';
 }
@@ -845,8 +852,9 @@ async function loadDispatchTab() {
     const sel = document.getElementById('dispatchDoSelect');
     sel.innerHTML = '<option value="">-- select DO --</option>' + dos.map(d =>
       `<option value="${escapeHtml(d.DO_No)}" data-balance="${d.Balance}" data-daysleft="${d.DaysLeft}" data-mine="${escapeHtml(d.Mine)}"
-               data-bookqty="${d.BookQty}" data-lifted="${d.Lifted}">
-        ${escapeHtml(d.DO_No)} | ${escapeHtml(d.Mine)} | Bal: ${fmtNum(d.Balance)} MT | ${d.DaysLeft}d left
+               data-bookqty="${d.BookQty}" data-lifted="${d.Lifted}" data-status="${escapeHtml(d.ComputedStatus)}">
+        ${escapeHtml(d.DO_No)} | ${escapeHtml(d.Mine)} | Bal: ${fmtNum(d.Balance)} MT |
+        ${d.ComputedStatus === 'Expired' ? 'EXPIRED — late entry' : d.DaysLeft + 'd left'}
       </option>`).join('');
     initChoices(sel);
   } catch (err) { onError(err); }
@@ -913,6 +921,9 @@ async function onSaveDispatch(e) {
     return;
   }
 
+  if (selOpt && selOpt.dataset.status === 'Expired' && !editingTripId) {
+    if (!confirm('This DO expired on its Valid Up To date. Log this as a late entry anyway?')) return;
+  }
   if (selOpt && parseFloat(payload.Qty) > parseFloat(selOpt.dataset.balance || 0) && !editingTripId) {
     if (!confirm('Qty exceeds remaining DO balance. Save anyway?')) return;
   }
@@ -952,6 +963,7 @@ async function loadRecentDispatches() {
         <td>${fmtNum(r.Qty)}</td><td>${escapeHtml(r.DestType)}</td><td>${escapeHtml(r.Customer)}</td><td>${fmtNum(r.Amount)}</td>
         <td><button class="btn-row-edit" data-edit-dispatch="${r.Trip_ID}">Edit</button></td>
         <td><button class="btn-row-photo" data-view-media="Dispatch" data-media-id="${r.Trip_ID}">Photos</button></td>
+        <td>${Session.role === 'SuperAdmin' ? `<button class="btn-row-edit" data-delete-dispatch="${r.Trip_ID}">Delete</button>` : ''}</td>
       </tr>
     `).join('');
   } catch (err) { onError(err); }
@@ -1303,8 +1315,9 @@ function renderLedgerTable() {
     <tr><td>${r.Date_fmt}</td><td>${escapeHtml(r.DocumentNo)}</td><td>${escapeHtml(r.Entity)}</td><td>${escapeHtml(r.PayeeName)}</td>
     <td>${escapeHtml(r.Transporter)}</td><td>${escapeHtml(r.TruckNo)}</td><td>${fmtNum(r.NetPayable)}</td><td>${fmtNum(r.TotalPaid)}</td><td>${fmtNum(r.Balance)}</td>
     <td>${escapeHtml(r.Status)}</td>
-    <td><button type="button" data-open-detail="${escapeHtml(r.FreightID)}">Details</button></td></tr>
-  `).join('') || '<tr><td colspan="11">No freight records match these filters.</td></tr>';
+    <td><button type="button" data-open-detail="${escapeHtml(r.FreightID)}">Details</button></td>
+    <td>${Session.role === 'SuperAdmin' ? `<button class="btn-row-edit" data-delete-freight="${escapeHtml(r.FreightID)}">Delete</button>` : ''}</td></tr>
+  `).join('') || '<tr><td colspan="12">No freight records match these filters.</td></tr>';
 
   document.querySelectorAll('[data-open-detail]').forEach(btn => {
     btn.addEventListener('click', () => openDetailModal(btn.dataset.openDetail));
@@ -1417,6 +1430,7 @@ const REPORT_META = {
   mineWise: { label: 'Mine-wise Statement — every DO tied to one mine', fn: viewMineWiseReport, roles: DO_ROLES },
   emdForfeiture: { label: 'EMD Forfeiture — forfeitable qty on expired DOs', fn: viewEmdForfeitureReport, roles: DO_ROLES },
   yardStockRange: { label: 'Yard Stock — opening/closing in a date range', fn: viewYardStockRangeReport, roles: DO_ROLES },
+  doBalanceAsOf: { label: 'DO Balance — as of a chosen date (not live)', fn: viewDOBalanceAsOfReport, roles: DO_ROLES },
   entityLedger: { label: 'Freight — Entity Ledger (TRL / TL)', fn: viewEntityLedgerReport, roles: FREIGHT_ROLES },
   outstanding: { label: 'Freight — Outstanding Balances', fn: viewOutstandingReport, roles: FREIGHT_ROLES },
   masterFreight: { label: 'Freight — Master Report (every record, every column)', fn: viewMasterFreightReport, roles: FREIGHT_ROLES },
@@ -1564,6 +1578,28 @@ async function viewYardStockRangeReport() {
       <td>${escapeHtml(r.ChallanNo)}</td><td>${escapeHtml(r.TruckNo)}</td><td>${fmtNum(r.Qty)}</td><td>${escapeHtml(r.Customer)}</td>
       <td>${r.Type === 'IN' ? 'Yard In' : 'Yard Out'}</td></tr>
     `).join('') || '<tr><td colspan="9">No truck movements in this date range</td></tr>';
+  } catch (err) { onError(err); }
+}
+
+/** Every DO's balance as it stood on a chosen date, not "as of right now" — only counts
+ * dispatch trips dated on or before that date. Status shown is still today's (Active/Expired
+ * etc. isn't re-derived for the past) since this report is about the quantity, not history. */
+async function viewDOBalanceAsOfReport() {
+  const asOfDate = document.getElementById('reportDoBalanceAsOfDate').value;
+  if (!asOfDate) { toast('Pick a date.', 'error'); return; }
+  try {
+    const rows = await apiGet('getDOBalanceAsOfDate', { asOfDate: asOfDate });
+    const totalBooked = round2ish(rows.reduce((s, r) => s + (Number(r.BookQty) || 0), 0));
+    const totalLifted = round2ish(rows.reduce((s, r) => s + (Number(r.Lifted) || 0), 0));
+    const totalBalance = round2ish(rows.reduce((s, r) => s + (Number(r.Balance) || 0), 0));
+    document.getElementById('reportResultExtra').innerHTML =
+      `<div class="do-info">As of ${escapeHtml(asOfDate.split('-').reverse().join('.'))} — Booked: ${fmtNum(totalBooked)} MT &nbsp; Lifted: ${fmtNum(totalLifted)} MT &nbsp; <strong>Balance: ${fmtNum(totalBalance)} MT</strong></div>`;
+    document.getElementById('reportTableHead').innerHTML =
+      `<tr><th>DO No.</th><th>Source</th><th>Mine</th><th>Grade</th><th>Area</th><th>Book Qty</th><th>Lifted (as of date)</th><th>Balance (as of date)</th><th>Valid Up To</th></tr>`;
+    document.getElementById('reportTableBody').innerHTML = rows.map(r => `
+      <tr><td>${escapeHtml(r.DO_No)}</td><td>${escapeHtml(r.Source)}</td><td>${escapeHtml(r.Mine)}</td><td>${escapeHtml(r.Grade)}</td><td>${escapeHtml(r.Area)}</td>
+      <td>${fmtNum(r.BookQty)}</td><td>${fmtNum(r.Lifted)}</td><td>${fmtNum(r.Balance)}</td><td>${r.ValidUpTo_fmt}</td></tr>
+    `).join('') || '<tr><td colspan="9">No DOs found.</td></tr>';
   } catch (err) { onError(err); }
 }
 
@@ -1880,7 +1916,45 @@ function setupRowEditDelegation() {
     if (dispatchBtn) { startEditDispatch(dispatchBtn.dataset.editDispatch); return; }
     const mediaBtn = e.target.closest('[data-view-media]');
     if (mediaBtn) { openMediaViewer(mediaBtn.dataset.viewMedia, mediaBtn.dataset.mediaId); return; }
+    const delDoBtn = e.target.closest('[data-delete-do]');
+    if (delDoBtn) { onDeleteDO(delDoBtn.dataset.deleteDo); return; }
+    const delDispatchBtn = e.target.closest('[data-delete-dispatch]');
+    if (delDispatchBtn) { onDeleteDispatch(delDispatchBtn.dataset.deleteDispatch); return; }
+    const delFreightBtn = e.target.closest('[data-delete-freight]');
+    if (delFreightBtn) { onDeleteFreight(delFreightBtn.dataset.deleteFreight); return; }
   });
+}
+
+/** SuperAdmin-only deletes — for cleaning up a genuine duplicate entry. The backend refuses (and
+ * these just surface its error) if something depends on the record, so this never silently
+ * orphans data; confirm() is the only "are you sure" — no undo once it's gone. */
+async function onDeleteDO(doNo) {
+  if (!confirm('Permanently delete DO ' + doNo + '? This cannot be undone.')) return;
+  try {
+    await apiPost('deleteDO', { doNo: doNo });
+    toast('DO ' + doNo + ' deleted.', 'success');
+    loadDashboard();
+  } catch (err) { onError(err); }
+}
+
+async function onDeleteDispatch(tripId) {
+  if (!confirm('Permanently delete dispatch ' + tripId + '? This cannot be undone.')) return;
+  try {
+    await apiPost('deleteDispatch', { tripId: tripId });
+    toast('Dispatch ' + tripId + ' deleted.', 'success');
+    loadDispatchTab();
+    loadDashboard();
+  } catch (err) { onError(err); }
+}
+
+async function onDeleteFreight(freightId) {
+  if (!confirm('Permanently delete freight record ' + freightId + ' — including all its deductions, additions, and payments? This cannot be undone.')) return;
+  try {
+    await apiPost('deleteFreightRecord', { freightId: freightId });
+    toast('Freight record ' + freightId + ' deleted.', 'success');
+    loadQueue();
+    loadLedger();
+  } catch (err) { onError(err); }
 }
 
 // ============================================================================
