@@ -1,8 +1,9 @@
 let MASTERS = {};
 let FREIGHT_MASTERS = {};
 let LAST_DOS = [];
-let LAST_DOS_SORTED = []; // latest-first, for the DO Register table + its filters
+let LAST_DOS_SORTED = []; // soonest-expiring-first, for the DO Register table + its filters
 let LAST_DISPATCHES = [];
+let LAST_YARD_LEDGER = []; // for Yard Out row-level Edit (Yard Out entries only — see startEditYardOut)
 let QUICK_ADD_TARGET_INPUT = null; // <input> element to fill in once the quick-add modal saves
 let CURRENT_QUEUE_ITEM = null; // freight queue row currently open in the Process Freight modal
 let CURRENT_FREIGHT_ID = null; // FreightID currently open in the Freight Detail modal
@@ -96,6 +97,10 @@ function enterApp() {
   setupTabs();
   applyRoleVisibility();
 
+  // Must run BEFORE setupDateDefaults() — that call fills EVERY empty date input with today,
+  // which would otherwise beat this to the From side of every range pair below (today, not the
+  // 1st of the month) since both only act on empty inputs and whichever runs first wins.
+  defaultDateRangesAll();
   setupDateDefaults();
   loadMasters();
   if (DO_ROLES.indexOf(Session.role) !== -1) loadDashboard();
@@ -111,8 +116,18 @@ function enterApp() {
   document.getElementById('doFilterMode').addEventListener('change', renderDoTable);
   document.getElementById('doFilterArea').addEventListener('change', renderDoTable);
   document.getElementById('doFilterStatus').addEventListener('change', renderDoTable);
+  document.getElementById('doFilterDateFrom').addEventListener('change', renderDoTable);
+  document.getElementById('doFilterDateTo').addEventListener('change', renderDoTable);
+  document.getElementById('dashboardYardFrom').addEventListener('change', loadDashboardYardStock);
+  document.getElementById('dashboardYardTo').addEventListener('change', loadDashboardYardStock);
+  document.getElementById('dispatchFilterFrom').addEventListener('change', loadRecentDispatches);
+  document.getElementById('dispatchFilterTo').addEventListener('change', loadRecentDispatches);
   document.getElementById('dispatchForm').addEventListener('submit', onSaveDispatch);
   document.getElementById('yardOutForm').addEventListener('submit', onSaveYardOut);
+  document.getElementById('btnCancelYardOutEdit').addEventListener('click', cancelYardOutEdit);
+  document.getElementById('btnResetYardOut').addEventListener('click', cancelYardOutEdit);
+  document.getElementById('yardOutFilterFrom').addEventListener('change', loadYardLedger);
+  document.getElementById('yardOutFilterTo').addEventListener('change', loadYardLedger);
   document.getElementById('dispatchSourceType').addEventListener('change', onDispatchSourceTypeChange);
   document.getElementById('basicPriceInput').addEventListener('input', updateRatePreview);
   document.getElementById('dispatchDoSelect').addEventListener('change', updateDispatchDoInfo);
@@ -180,6 +195,39 @@ function onLogout() {
 function setupDateDefaults() {
   const today = new Date().toISOString().slice(0, 10);
   document.querySelectorAll('input[type=date]').forEach(inp => { if (!inp.value) inp.value = today; });
+}
+
+/** Sets one From/To date-input pair to [1st of this month, today] if either is currently
+ * empty — never overwrites a value already chosen. The app-wide default for every date-range
+ * filter, per how the client wants every "scenario" to start (see defaultDateRangesAll). */
+function defaultDateRange(fromId, toId) {
+  const fromEl = document.getElementById(fromId), toEl = document.getElementById(toId);
+  if (!fromEl && !toEl) return;
+  const today = new Date();
+  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const iso = d => d.toISOString().slice(0, 10);
+  if (fromEl && !fromEl.value) fromEl.value = iso(firstOfMonth);
+  if (toEl && !toEl.value) toEl.value = iso(today);
+}
+
+/** Every From/To range filter in the app, plus the single "as of" date report — all default to
+ * month-to-date. Called once at login; each pair is independently safe to call again later
+ * (e.g. after a form reset) since it only ever fills an empty field. */
+function defaultDateRangesAll() {
+  [
+    ['doFilterDateFrom', 'doFilterDateTo'],
+    ['dispatchFilterFrom', 'dispatchFilterTo'],
+    ['yardOutFilterFrom', 'yardOutFilterTo'],
+    ['dashboardYardFrom', 'dashboardYardTo'],
+    ['reportDispatchFrom', 'reportDispatchTo'],
+    ['reportYardFrom', 'reportYardTo'],
+    ['reportEntityFrom', 'reportEntityTo'],
+    ['reportMasterFrom', 'reportMasterTo'],
+    ['reportCombinedFrom', 'reportCombinedTo'],
+    ['ledgerFilterFrom', 'ledgerFilterTo']
+  ].forEach(([fromId, toId]) => defaultDateRange(fromId, toId));
+  const asOf = document.getElementById('reportDoBalanceAsOfDate');
+  if (asOf && !asOf.value) asOf.value = new Date().toISOString().slice(0, 10);
 }
 
 // ---------- TABS ----------
@@ -334,16 +382,17 @@ function renderDashboard(data) {
     <div class="card expired"><div class="num">₹${fmtNum(f.totalOutstanding || 0)}</div><div class="label">Freight — Total Outstanding</div></div>
   `;
 
-  // DO Register lists most-recently-added first (CreatedAt), independent of the charts'
-  // ordering above (which sorts by days-left — the ordering that matters for expiry triage).
-  LAST_DOS_SORTED = [...data.dos].sort((a, b) => new Date(b.CreatedAt || b.DO_Date) - new Date(a.CreatedAt || a.DO_Date));
+  // DO Register lists soonest-expiring first — data.dos already arrives in that order from
+  // getDOList() (DaysLeft ascending, nulls/finished DOs last), so this is just making the
+  // intent explicit rather than silently relying on the backend's ordering.
+  LAST_DOS_SORTED = [...data.dos].sort((a, b) => (a.DaysLeft == null ? 999999 : a.DaysLeft) - (b.DaysLeft == null ? 999999 : b.DaysLeft));
   populateDoFilterOptions();
   renderDoTable();
 
-  const ytbody = document.querySelector('#yardTable tbody');
-  ytbody.innerHTML = data.yardStock.map(y => `
-    <tr><td>${escapeHtml(y.yard)}</td><td>${fmtNum(y.in)}</td><td>${fmtNum(y.out)}</td><td>${fmtNum(y.balance)}</td></tr>
-  `).join('') || '<tr><td colspan="4">No yard movements yet</td></tr>';
+  // The Dashboard's "Yard Stock" table is date-ranged (Opening/In/Out/Closing for the picked
+  // period), not the live cumulative total — that's what the "Yard In vs Out" chart above
+  // already shows, driven by data.yardStock. Two different questions, two different views.
+  loadDashboardYardStock();
 
   renderStatusChart(data.dos);
   renderMineChart(data.dos);
@@ -351,6 +400,20 @@ function renderDashboard(data) {
   renderTrendChart(data.trend || []);
   renderYardChart(data.yardStock || []);
   renderYardMaterialChart(data.yardMaterialOut || []);
+}
+
+/** Dashboard "Yard Stock" table — Opening/In/Out/Closing balance per yard for the picked date
+ * range (reuses the same backend call as the Reports tab's "Yard Stock" report). */
+async function loadDashboardYardStock() {
+  const from = document.getElementById('dashboardYardFrom').value;
+  const to = document.getElementById('dashboardYardTo').value;
+  if (!from || !to) return;
+  try {
+    const data = await apiGet('getYardStockByDateRange', { dateFrom: from, dateTo: to });
+    document.querySelector('#yardTable tbody').innerHTML = data.summary.map(y => `
+      <tr><td>${escapeHtml(y.yard)}</td><td>${fmtNum(y.opening)}</td><td>${fmtNum(y.rangeIn)}</td><td>${fmtNum(y.rangeOut)}</td><td>${fmtNum(y.closing)}</td></tr>
+    `).join('') || '<tr><td colspan="5">No yard movements in this range</td></tr>';
+  } catch (err) { onError(err); }
 }
 
 function populateDoFilterOptions() {
@@ -366,12 +429,16 @@ function populateDoFilterOptions() {
   keepValue(areaSel, areas);
 }
 
-/** Applies the Source/Mode/Area filters (if any) and re-renders the DO Register table body. */
+/** Applies the Source/Mode/Area/DO-Date filters (if any) and re-renders the DO Register table
+ * body, sorted soonest-expiring first (LAST_DOS_SORTED is already in that order — see
+ * renderDashboard — so this never re-sorts). */
 function renderDoTable() {
   const source = document.getElementById('doFilterSource').value;
   const mode = document.getElementById('doFilterMode').value;
   const area = document.getElementById('doFilterArea').value;
   const status = document.getElementById('doFilterStatus').value;
+  const dateFrom = document.getElementById('doFilterDateFrom').value ? new Date(document.getElementById('doFilterDateFrom').value) : null;
+  const dateTo = document.getElementById('doFilterDateTo').value ? new Date(document.getElementById('doFilterDateTo').value) : null;
 
   // "Active" also covers "Expiring Soon" — a DO nearing its valid-up-to date is still active,
   // just flagged as urgent. "Expiring Soon" stays selectable on its own for isolating just those.
@@ -380,27 +447,35 @@ function renderDoTable() {
     if (status === 'Active') return d.ComputedStatus === 'Active' || d.ComputedStatus === 'Expiring Soon';
     return d.ComputedStatus === status;
   };
+  const matchesDate = d => {
+    if (!dateFrom && !dateTo) return true;
+    if (!d.DO_Date) return false;
+    const doDate = new Date(d.DO_Date);
+    if (dateFrom && doDate < dateFrom) return false;
+    if (dateTo && doDate > dateTo) return false;
+    return true;
+  };
 
   const rows = LAST_DOS_SORTED.filter(d =>
     (!source || d.Source === source) &&
     (!mode || d.Mode === mode) &&
     (!area || d.Area === area) &&
-    matchesStatus(d)
+    matchesStatus(d) && matchesDate(d)
   );
 
   const tbody = document.querySelector('#doTable tbody');
   tbody.innerHTML = rows.map(d => `
     <tr>
-      <td>${escapeHtml(d.DO_No)}</td>
+      <td class="cell-strong">${escapeHtml(d.DO_No)}</td>
       <td>${escapeHtml(d.Source)}</td>
       <td>${escapeHtml(d.Mode)}</td>
       <td>${escapeHtml(d.Area)}</td>
       <td><span class="status-pill status-${d.ComputedStatus.replace(/\s/g,'-')}">${d.ComputedStatus}</span></td>
-      <td>${escapeHtml(d.Mine)}</td>
+      <td class="cell-strong">${escapeHtml(d.Mine)}</td>
       <td>${escapeHtml(d.Grade)}</td>
-      <td>${fmtNum(d.BookQty)}</td>
+      <td class="cell-strong">${fmtNum(d.BookQty)}</td>
       <td>${fmtNum(d.Lifted)}</td>
-      <td>${fmtNum(d.Balance)}</td>
+      <td class="cell-strong">${fmtNum(d.Balance)}</td>
       <td>${fmtNum(d.Bid)}</td>
       <td>${fmtNum(d.BasicPrice)}</td>
       <td>${fmtNum(d.GST18Rate)}</td>
@@ -952,12 +1027,17 @@ async function onSaveDispatch(e) {
   } catch (err) { onError(err); }
 }
 
+/** Dispatches within the picked From/To range (defaults to month-to-date — see
+ * defaultDateRangesAll). Every match renders, not capped to a fixed count, since the date
+ * range itself is what keeps the table a sane size. */
 async function loadRecentDispatches() {
+  const dateFrom = document.getElementById('dispatchFilterFrom').value;
+  const dateTo = document.getElementById('dispatchFilterTo').value;
   try {
-    const rows = await apiGet('getDispatchLog');
+    const rows = await apiGet('getDispatchLog', { dateFrom: dateFrom, dateTo: dateTo });
     LAST_DISPATCHES = rows;
     const tbody = document.querySelector('#recentDispatchTable tbody');
-    tbody.innerHTML = rows.slice(0, 25).map(r => `
+    tbody.innerHTML = rows.map(r => `
       <tr>
         <td>${r.Date_fmt}</td><td>${escapeHtml(r.DO_No)}</td><td>${escapeHtml(r.TruckNo)}</td>
         <td>${fmtNum(r.Qty)}</td><td>${escapeHtml(r.DestType)}</td><td>${escapeHtml(r.Customer)}</td><td>${fmtNum(r.Amount)}</td>
@@ -965,7 +1045,7 @@ async function loadRecentDispatches() {
         <td><button class="btn-row-photo" data-view-media="Dispatch" data-media-id="${r.Trip_ID}">Photos</button></td>
         <td>${Session.role === 'SuperAdmin' ? `<button class="btn-row-edit" data-delete-dispatch="${r.Trip_ID}">Delete</button>` : ''}</td>
       </tr>
-    `).join('');
+    `).join('') || '<tr><td colspan="10">No dispatches in this date range</td></tr>';
   } catch (err) { onError(err); }
 }
 
@@ -1032,14 +1112,53 @@ async function onSaveYardOut(e) {
   e.preventDefault();
   const form = e.target;
   const payload = Object.fromEntries(new FormData(form).entries());
+  const editingEntryId = payload.editingEntryId;
+  delete payload.editingEntryId;
   try {
-    await apiPost('addYardOut', payload);
-    toast('Yard-out entry saved.', 'success');
-    form.reset();
-    setupDateDefaults();
+    if (editingEntryId) {
+      await apiPost('updateYardOut', Object.assign({ entryId: editingEntryId }, payload));
+      toast('Yard-out entry ' + editingEntryId + ' updated.', 'success');
+      cancelYardOutEdit();
+    } else {
+      await apiPost('addYardOut', payload);
+      toast('Yard-out entry saved.', 'success');
+      form.reset();
+      setupDateDefaults();
+    }
     loadYardLedger();
     loadDashboard();
   } catch (err) { onError(err); }
+}
+
+/** Loads an existing Yard Out entry into the form so a mistake can be corrected in place. */
+function startEditYardOut(entryId) {
+  const r = LAST_YARD_LEDGER.find(x => x.Entry_ID === entryId);
+  if (!r) return;
+  const form = document.getElementById('yardOutForm');
+  form.editingEntryId.value = entryId;
+  form.Date.value = toDateInputValue(r.Date);
+  form.Yard.value = r.Yard || '';
+  form.TruckNo.value = r.TruckNo || '';
+  form.Qty.value = r.Qty || '';
+  form.Material.value = r.Material || '';
+  form.Customer.value = r.Party || '';
+  form.ChallanNo.value = r.ChallanNo || '';
+  form.DocumentNo.value = r.DocumentNo || '';
+  form.FreightApplicable.value = r.FreightApplicable || 'No';
+  form.Remarks.value = r.Remarks || '';
+
+  document.getElementById('yardOutEditLabel').textContent = entryId + ' (' + r.TruckNo + ')';
+  document.getElementById('yardOutEditBanner').classList.add('show');
+  document.getElementById('yardOutSubmitBtn').textContent = 'Update Yard Out';
+}
+
+function cancelYardOutEdit() {
+  const form = document.getElementById('yardOutForm');
+  form.reset();
+  form.editingEntryId.value = '';
+  setupDateDefaults();
+  document.getElementById('yardOutEditBanner').classList.remove('show');
+  document.getElementById('yardOutSubmitBtn').textContent = 'Save Yard Out';
 }
 
 async function loadYardOutTab() {
@@ -1154,14 +1273,22 @@ function miniMaterialDonutHtml(materialOut) {
   `;
 }
 
+/** Yard Ledger within the picked From/To range (defaults to month-to-date). Edit/Delete only
+ * ever show on Type=OUT rows — a Type=IN row is always tied to its originating dispatch trip
+ * (see updateYardOut/deleteYardEntry), so it's corrected/removed from Dispatch Entry instead. */
 async function loadYardLedger() {
+  const dateFrom = document.getElementById('yardOutFilterFrom').value;
+  const dateTo = document.getElementById('yardOutFilterTo').value;
   try {
-    const rows = await apiGet('getYardLedger');
+    const rows = await apiGet('getYardLedger', { dateFrom: dateFrom, dateTo: dateTo });
+    LAST_YARD_LEDGER = rows;
     const tbody = document.querySelector('#yardLedgerTable tbody');
     tbody.innerHTML = rows.map(r => `
       <tr><td>${r.Date_fmt}</td><td>${escapeHtml(r.Type)}</td><td>${escapeHtml(r.Yard)}</td>
-      <td>${escapeHtml(r.Party)}</td><td>${escapeHtml(r.PartyType)}</td><td>${escapeHtml(r.TruckNo)}</td><td>${fmtNum(r.Qty)}</td></tr>
-    `).join('') || '<tr><td colspan="7">No entries yet</td></tr>';
+      <td>${escapeHtml(r.Party)}</td><td>${escapeHtml(r.PartyType)}</td><td>${escapeHtml(r.TruckNo)}</td><td>${fmtNum(r.Qty)}</td>
+      <td>${r.Type === 'OUT' ? `<button class="btn-row-edit" data-edit-yardout="${r.Entry_ID}">Edit</button>` : ''}</td>
+      <td>${r.Type === 'OUT' && Session.role === 'SuperAdmin' ? `<button class="btn-row-edit" data-delete-yardout="${r.Entry_ID}">Delete</button>` : ''}</td></tr>
+    `).join('') || '<tr><td colspan="9">No entries in this date range</td></tr>';
   } catch (err) { onError(err); }
 }
 
@@ -1922,7 +2049,21 @@ function setupRowEditDelegation() {
     if (delDispatchBtn) { onDeleteDispatch(delDispatchBtn.dataset.deleteDispatch); return; }
     const delFreightBtn = e.target.closest('[data-delete-freight]');
     if (delFreightBtn) { onDeleteFreight(delFreightBtn.dataset.deleteFreight); return; }
+    const yardOutBtn = e.target.closest('[data-edit-yardout]');
+    if (yardOutBtn) { startEditYardOut(yardOutBtn.dataset.editYardout); return; }
+    const delYardOutBtn = e.target.closest('[data-delete-yardout]');
+    if (delYardOutBtn) { onDeleteYardOut(delYardOutBtn.dataset.deleteYardout); return; }
   });
+}
+
+async function onDeleteYardOut(entryId) {
+  if (!confirm('Permanently delete yard-out entry ' + entryId + '? This cannot be undone.')) return;
+  try {
+    await apiPost('deleteYardEntry', { entryId: entryId });
+    toast('Yard-out entry ' + entryId + ' deleted.', 'success');
+    loadYardLedger();
+    loadDashboard();
+  } catch (err) { onError(err); }
 }
 
 /** SuperAdmin-only deletes — for cleaning up a genuine duplicate entry. The backend refuses (and

@@ -84,6 +84,12 @@
               <option value="Sold">Sold</option>
             </select>
           </label>
+          <label>DO Date From
+            <input type="date" id="doFilterDateFrom">
+          </label>
+          <label>DO Date To
+            <input type="date" id="doFilterDateTo">
+          </label>
           <button type="button" id="btnExportDoExcel">Export Excel</button>
           <button type="button" id="btnExportDoPdf">Export PDF</button>
         </div>
@@ -133,9 +139,17 @@
         </div>
 
         <h2>Yard Stock</h2>
+        <div class="report-tools">
+          <label>From
+            <input type="date" id="dashboardYardFrom">
+          </label>
+          <label>To
+            <input type="date" id="dashboardYardTo">
+          </label>
+        </div>
         <div class="table-wrap">
           <table id="yardTable">
-            <thead><tr><th>Yard</th><th>In</th><th>Out</th><th>Balance</th></tr></thead>
+            <thead><tr><th>Yard</th><th>Opening Balance</th><th>In</th><th>Out</th><th>Closing Balance</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -295,7 +309,15 @@
           </div>
         </form>
 
-        <h2>Recent Dispatches</h2>
+        <h2>Dispatches</h2>
+        <div class="report-tools">
+          <label>From
+            <input type="date" id="dispatchFilterFrom">
+          </label>
+          <label>To
+            <input type="date" id="dispatchFilterTo">
+          </label>
+        </div>
         <div class="table-wrap scroll-tall">
           <table id="recentDispatchTable">
             <thead><tr><th>Date</th><th>DO No.</th><th>Truck</th><th>Qty</th><th>Dest</th><th>Customer</th><th>Amount</th><th></th><th></th><th></th></tr></thead>
@@ -318,7 +340,12 @@
           leaving the yard only.</p>
 
         <h2>Yard Out Entry (Yard → Customer)</h2>
+        <div class="edit-banner" id="yardOutEditBanner">
+          <span>✏️ Editing yard-out entry <b id="yardOutEditLabel"></b> — changes will update this entry, not create a new one.</span>
+          <button type="button" id="btnCancelYardOutEdit">Cancel Edit</button>
+        </div>
         <form id="yardOutForm" class="form-grid">
+          <input type="hidden" name="editingEntryId" value="">
           <label>Date <input type="date" name="Date" required></label>
           <div class="field-with-add">
             <label>Yard
@@ -349,15 +376,23 @@
           </label>
           <label class="full">Remarks <input name="Remarks"></label>
           <div class="full form-actions">
-            <button type="submit">Save Yard Out</button>
-            <button type="reset" class="btn-reset">Reset</button>
+            <button type="submit" id="yardOutSubmitBtn">Save Yard Out</button>
+            <button type="button" class="btn-reset" id="btnResetYardOut">Reset</button>
           </div>
         </form>
 
         <h2>Yard Ledger</h2>
+        <div class="report-tools">
+          <label>From
+            <input type="date" id="yardOutFilterFrom">
+          </label>
+          <label>To
+            <input type="date" id="yardOutFilterTo">
+          </label>
+        </div>
         <div class="table-wrap scroll-tall">
           <table id="yardLedgerTable">
-            <thead><tr><th>Date</th><th>Type</th><th>Yard</th><th>Party</th><th>Party Type</th><th>Truck</th><th>Qty</th></tr></thead>
+            <thead><tr><th>Date</th><th>Type</th><th>Yard</th><th>Party</th><th>Party Type</th><th>Truck</th><th>Qty</th><th></th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
