@@ -133,7 +133,7 @@
           </div>
           <div class="chart-card">
             <div class="chart-title">Yard Out by Material</div>
-            <div class="chart-sub">What's actually leaving the yard — Coal / Chura / Stone (MT)</div>
+            <div class="chart-sub">What's actually leaving the yard — Steam / Rodi / Chura / Stone (MT)</div>
             <div id="yardMaterialChart"></div>
           </div>
         </div>
@@ -179,23 +179,20 @@
           <label>DO Date <input type="date" name="DO_Date" required></label>
           <div class="field-with-add">
             <label>Area
-              <input list="areasList" name="Area">
-              <datalist id="areasList"></datalist>
+              <select name="Area" id="areaSelect"><option value="">-- select --</option></select>
             </label>
             <button type="button" class="btn-quick-add" data-quick-add="Areas" title="Add new area">+</button>
           </div>
           <div class="field-with-add">
             <label>Mine
-              <input list="minesList" name="Mine" required>
-              <datalist id="minesList"></datalist>
+              <select name="Mine" id="mineSelect" required><option value="">-- select --</option></select>
             </label>
             <button type="button" class="btn-quick-add" data-quick-add="Mines" title="Add new mine">+</button>
           </div>
           <label>Trader Purchased (if any) <input name="TraderPurchased"></label>
           <div class="field-with-add">
             <label>Grade
-              <input list="gradesList" name="Grade">
-              <datalist id="gradesList"></datalist>
+              <select name="Grade" id="gradeSelect"><option value="">-- select --</option></select>
             </label>
             <button type="button" class="btn-quick-add" data-quick-add="Grades" title="Add new grade">+</button>
           </div>
@@ -205,8 +202,7 @@
           <label>Valid Up To <input type="date" name="ValidUpTo" required></label>
           <div class="field-with-add">
             <label>Transport Name
-              <input list="transportersList" name="TransportName">
-              <datalist id="transportersList"></datalist>
+              <select name="TransportName" id="transportNameSelect"><option value="">-- select --</option></select>
             </label>
             <button type="button" class="btn-quick-add" data-quick-add="Transporters" title="Add new transporter">+</button>
           </div>
@@ -267,8 +263,7 @@
           </div>
           <div class="field-with-add full hidden" id="dispatchOtherPartyField">
             <label>Source Party (trader / importer / other)
-              <input list="otherPartiesList" name="SourceParty">
-              <datalist id="otherPartiesList"></datalist>
+              <select name="SourceParty" id="sourcePartySelect"><option value="">-- select --</option></select>
             </label>
             <button type="button" class="btn-quick-add" data-quick-add="OtherParties" title="Add new party">+</button>
           </div>
@@ -286,8 +281,7 @@
           </label>
           <div class="field-with-add">
             <label>Customer / Yard Name
-              <input list="customersList" name="Customer" required>
-              <datalist id="customersList"></datalist>
+              <select name="Customer" id="dispatchCustomerSelect" required><option value="">-- select --</option></select>
             </label>
             <button type="button" class="btn-quick-add" data-quick-add="Customers" title="Add new customer">+</button>
           </div>
@@ -349,8 +343,7 @@
           <label>Date <input type="date" name="Date" required></label>
           <div class="field-with-add">
             <label>Yard
-              <input list="yardsList" name="Yard" value="Main Yard">
-              <datalist id="yardsList"></datalist>
+              <select name="Yard" id="yardOutYardSelect"></select>
             </label>
             <button type="button" class="btn-quick-add" data-quick-add="Yards" title="Add new yard">+</button>
           </div>
@@ -361,8 +354,7 @@
           </label>
           <div class="field-with-add">
             <label>Customer
-              <input list="customersList2" name="Customer" required>
-              <datalist id="customersList2"></datalist>
+              <select name="Customer" id="yardOutCustomerSelect" required><option value="">-- select --</option></select>
             </label>
             <button type="button" class="btn-quick-add" data-quick-add="Customers" title="Add new customer">+</button>
           </div>
@@ -409,11 +401,10 @@
           <div id="reportParams" class="report-picker-params">
             <label class="report-picker-field" data-param="doStatement">DO <select id="reportDoSelect"></select></label>
             <label class="report-picker-field" data-param="customerWise">Customer
-              <input list="reportCustomerList" id="reportCustomerInput" placeholder="Type a customer name">
-              <datalist id="reportCustomerList"></datalist>
+              <select id="reportCustomerInput"><option value="">-- select --</option></select>
             </label>
             <label class="report-picker-field" data-param="mineWise">Mine
-              <input list="minesList" id="reportMineInput" placeholder="Type a mine name">
+              <select id="reportMineInput"><option value="">-- select --</option></select>
             </label>
             <label class="report-picker-field" data-param="dispatchRange">From <input type="date" id="reportDispatchFrom"></label>
             <label class="report-picker-field" data-param="dispatchRange">To <input type="date" id="reportDispatchTo"></label>
@@ -487,7 +478,7 @@
               <label>Party (customer / other party) <input name="ManualParty"></label>
             </div>
             <label class="full">Transporter (primary)
-              <input list="transportersList" name="Transporter">
+              <select name="Transporter" id="processTransporterSelect"><option value="">-- select --</option></select>
             </label>
             <label>Entity (who pays)
               <select name="Entity" id="processEntity" required></select>

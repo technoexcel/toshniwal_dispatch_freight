@@ -264,15 +264,16 @@ async function loadMasters() {
     const m = await apiGet('getMasters');
     MASTERS = m;
     fillSelect('doSource', m.Sources);
-    fillDatalist('areasList', m.Areas);
-    fillDatalist('minesList', m.Mines);
-    fillDatalist('gradesList', m.Grades);
-    fillDatalist('transportersList', m.Transporters);
-    fillDatalist('customersList', (m.Customers || []).concat(m.Yards || []));
-    fillDatalist('customersList2', m.Customers);
-    fillDatalist('yardsList', m.Yards);
-    fillDatalist('otherPartiesList', m.OtherParties);
-    fillDatalist('reportCustomerList', m.Customers);
+    fillSelectStrict('areaSelect', m.Areas);
+    fillSelectStrict('mineSelect', m.Mines);
+    fillSelectStrict('gradeSelect', m.Grades);
+    fillSelectStrict('transportNameSelect', m.Transporters);
+    fillSelectStrict('dispatchCustomerSelect', (m.Customers || []).concat(m.Yards || []));
+    fillSelectStrict('yardOutCustomerSelect', m.Customers);
+    fillSelectStrict('yardOutYardSelect', m.Yards, 'Main Yard');
+    fillSelectStrict('sourcePartySelect', m.OtherParties);
+    fillSelectStrict('reportCustomerInput', m.Customers);
+    fillSelectStrict('reportMineInput', m.Mines);
     fillSelect('yardOutMaterial', m.Materials);
   } catch (err) { onError(err); }
 }
@@ -286,6 +287,39 @@ function fillDatalist(id, values) {
   const el = document.getElementById(id);
   if (!el) return;
   el.innerHTML = (values || []).map(v => `<option value="${escapeHtml(v)}">`).join('');
+}
+
+/** Populates a <select> strictly from a master list — no free text can get past it, unlike the
+ * old list+datalist inputs these fields used to be. Preserves whatever's already selected (e.g.
+ * after a masters reload triggered by quick-add), or falls back to defaultValue if given and
+ * present in the list, or a blank "-- select --" placeholder otherwise. */
+/** Sets a <select>'s value to an existing record's saved value — injecting a one-off option
+ * first if that value isn't already in the master list (a record saved before this field became
+ * a strict dropdown, or a master value since renamed/removed). Without this, opening such a
+ * record for edit would silently blank the field, and saving would silently discard the real
+ * historical value instead of just leaving it untouched. */
+function selectValuePreserving(selectEl, value) {
+  if (!selectEl) return;
+  value = value || '';
+  if (!value) { selectEl.value = ''; return; }
+  const has = Array.from(selectEl.options).some(o => o.value === value);
+  if (!has) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value + ' (not in master list — pick a real one to change it)';
+    selectEl.appendChild(opt);
+  }
+  selectEl.value = value;
+}
+
+function fillSelectStrict(id, values, defaultValue) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const current = el.value;
+  const keep = (current && (values || []).includes(current)) ? current : (defaultValue || '');
+  const placeholder = keep ? '' : '<option value="">-- select --</option>';
+  el.innerHTML = placeholder + (values || []).map(v =>
+    `<option${v === keep ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
 }
 
 function escapeHtml(s) {
@@ -772,13 +806,13 @@ function renderYardChart(yardStock, targetId) {
   wireTooltips(el);
 }
 
-// ---------- Yard Out material split (Coal / Chura / Stone) ----------
+// ---------- Yard Out material split (Steam / Rodi / Chura / Stone) ----------
 function renderYardMaterialChart(materialOut) {
   const el = document.getElementById('yardMaterialChart');
   const total = Math.round(materialOut.reduce((s, m) => s + (Number(m.qty) || 0), 0) * 100) / 100;
   if (!total) { el.innerHTML = '<div class="chart-empty">No yard-out movements recorded yet.</div>'; return; }
 
-  const palette = { Coal: VIZ.catBlue, Chura: VIZ.catOrange, Stone: VIZ.violet };
+  const palette = { Steam: VIZ.catBlue, Rodi: VIZ.warning, Chura: VIZ.catOrange, Stone: VIZ.violet };
   const buckets = materialOut
     .filter(m => m.qty > 0)
     .sort((a, b) => b.qty - a.qty)
@@ -868,15 +902,15 @@ function startEditDo(doNo) {
   form.GST_State.value = d.GST_State || '';
   form.DO_No.value = d.DO_No || '';
   form.DO_Date.value = toDateInputValue(d.DO_Date);
-  form.Area.value = d.Area || '';
-  form.Mine.value = d.Mine || '';
+  selectValuePreserving(form.Area, d.Area);
+  selectValuePreserving(form.Mine, d.Mine);
   form.TraderPurchased.value = d.TraderPurchased || '';
-  form.Grade.value = d.Grade || '';
+  selectValuePreserving(form.Grade, d.Grade);
   form.BookQty.value = d.BookQty || '';
   form.Bid.value = d.Bid || '';
   form.BasicPrice.value = d.BasicPrice || '';
   form.ValidUpTo.value = toDateInputValue(d.ValidUpTo);
-  form.TransportName.value = d.TransportName || '';
+  selectValuePreserving(form.TransportName, d.TransportName);
   form.Sold.value = d.Sold || 'No';
   form.SoldToParty.value = d.SoldToParty || '';
   form.RefundExpected.value = d.RefundExpected || '';
@@ -1059,7 +1093,7 @@ function startEditDispatch(tripId) {
   form.SourceType.value = isOtherParty ? 'OtherParty' : 'Mine';
   onDispatchSourceTypeChange();
   if (isOtherParty) {
-    form.SourceParty.value = r.SourceParty || '';
+    selectValuePreserving(form.SourceParty, r.SourceParty);
   } else {
     selectDoInDropdown(r.DO_No || '');
   }
@@ -1069,7 +1103,7 @@ function startEditDispatch(tripId) {
   form.TruckNo.value = r.TruckNo || '';
   form.Qty.value = r.Qty || '';
   form.DestType.value = r.DestType || 'Customer';
-  form.Customer.value = r.Customer || '';
+  selectValuePreserving(form.Customer, r.Customer);
   form.SaleRate.value = r.SaleRate || '';
   form.Remarks.value = r.Remarks || '';
 
@@ -1137,11 +1171,11 @@ function startEditYardOut(entryId) {
   const form = document.getElementById('yardOutForm');
   form.editingEntryId.value = entryId;
   form.Date.value = toDateInputValue(r.Date);
-  form.Yard.value = r.Yard || '';
+  selectValuePreserving(form.Yard, r.Yard);
   form.TruckNo.value = r.TruckNo || '';
   form.Qty.value = r.Qty || '';
   form.Material.value = r.Material || '';
-  form.Customer.value = r.Party || '';
+  selectValuePreserving(form.Customer, r.Party);
   form.ChallanNo.value = r.ChallanNo || '';
   form.DocumentNo.value = r.DocumentNo || '';
   form.FreightApplicable.value = r.FreightApplicable || 'No';
@@ -1179,7 +1213,7 @@ async function loadYardOutTab() {
 }
 
 /** Compact per-yard stat card (In / Out / Balance + a slim composition bar), with a small
- * Coal/Chura/Stone donut alongside it — used for the "Current Yard Stock" snapshot.
+ * Steam/Rodi/Chura/Stone donut alongside it — used for the "Current Yard Stock" snapshot.
  * Deliberately not the wide comparison bar chart used on the Dashboard: with only 1-2 yards,
  * that chart stretches to fill the page width and leaves most of it empty. Stat tiles read
  * cleanly at any width, including a single yard. The material donut is a global (all-yards)
@@ -1227,14 +1261,14 @@ function renderYardStockCards(yardStock, materialOut, targetId) {
   wireTooltips(el);
 }
 
-/** Small Coal/Chura/Stone donut for the Yard Out snapshot — same palette/logic as the
+/** Small Steam/Rodi/Chura/Stone donut for the Yard Out snapshot — same palette/logic as the
  * Dashboard's full-size "Yard Out by Material" chart, just sized down and without the big
  * center total (there isn't room for it at this scale). */
 function miniMaterialDonutHtml(materialOut) {
   const total = Math.round(materialOut.reduce((s, m) => s + (Number(m.qty) || 0), 0) * 100) / 100;
   if (!total) return '<div class="yard-stock-material"><div class="yard-stock-material-title">Yard Out by Material</div><div class="chart-empty">No yard-out movements yet.</div></div>';
 
-  const palette = { Coal: VIZ.catBlue, Chura: VIZ.catOrange, Stone: VIZ.violet };
+  const palette = { Steam: VIZ.catBlue, Rodi: VIZ.warning, Chura: VIZ.catOrange, Stone: VIZ.violet };
   const buckets = materialOut
     .filter(m => m.qty > 0)
     .sort((a, b) => b.qty - a.qty)
@@ -1296,7 +1330,7 @@ async function loadYardLedger() {
 async function loadFreightMasters() {
   try {
     FREIGHT_MASTERS = await apiGet('getFreightMasters');
-    fillDatalist('transportersList', FREIGHT_MASTERS.Transporters);
+    fillSelectStrict('processTransporterSelect', FREIGHT_MASTERS.Transporters);
     fillSelect('processEntity', FREIGHT_MASTERS.Entities);
     fillSelect('additionReasonSelect', FREIGHT_MASTERS.AdditionReasons);
     fillSelect('deductionReasonSelect', FREIGHT_MASTERS.DeductionReasons);
@@ -1996,7 +2030,7 @@ function setupQuickAdd() {
   document.querySelectorAll('[data-quick-add]').forEach(btn => {
     btn.addEventListener('click', () => {
       const listName = btn.dataset.quickAdd;
-      QUICK_ADD_TARGET_INPUT = btn.closest('.field-with-add').querySelector('input');
+      QUICK_ADD_TARGET_INPUT = btn.closest('.field-with-add').querySelector('input, select');
       document.getElementById('quickAddTitle').textContent = 'Add new ' + (QUICK_ADD_LABELS[listName] || listName.toLowerCase());
       const input = document.getElementById('quickAddInput');
       input.value = '';
