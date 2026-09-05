@@ -2,6 +2,7 @@ let MASTERS = {};
 let FREIGHT_MASTERS = {};
 let LAST_DOS = [];
 let LAST_DOS_SORTED = []; // soonest-expiring-first, for the DO Register table + its filters
+let LAST_DASHBOARD_SUMMARY = {}; // cached non-DO-derived KPI fields (Today's Trips) — see renderDoKpis
 let LAST_DISPATCHES = [];
 let LAST_YARD_LEDGER = []; // for Yard Out row-level Edit (Yard Out entries only — see startEditYardOut)
 let QUICK_ADD_TARGET_INPUT = null; // <input> element to fill in once the quick-add modal saves
@@ -394,16 +395,11 @@ async function loadDashboard() {
 
 function renderDashboard(data) {
   LAST_DOS = data.dos;
-  const s = data.summary;
-  document.getElementById('summaryCards').innerHTML = `
-    <div class="card active"><div class="num">${s.activeCount}</div><div class="label">Active DOs</div></div>
-    <div class="card expiring"><div class="num">${s.expiringSoonCount}</div><div class="label">Expiring Soon</div></div>
-    <div class="card expired"><div class="num">${s.expiredCount}</div><div class="label">Expired (unfulfilled)</div></div>
-    <div class="card"><div class="num">${s.completedCount}</div><div class="label">Completed</div></div>
-    <div class="card"><div class="num">${s.soldCount || 0}</div><div class="label">Sold</div></div>
-    <div class="card"><div class="num">${fmtNum(s.totalBalanceQty)}</div><div class="label">Total Balance Qty (MT)</div></div>
-    <div class="card"><div class="num">${s.todayTripCount}</div><div class="label">Today's Trips (${fmtNum(s.todayQty)} MT)</div></div>
-  `;
+  // Today's Trips isn't DO-derived (it's from Dispatch_Log) so it never reacts to the DO
+  // Register's Source/Mode/Area/DO-Date filters — cached here once so renderDoKpis (called
+  // again on every filter change) can keep reusing it without a re-fetch.
+  LAST_DASHBOARD_SUMMARY = data.summary || {};
+  renderDoKpis(data.dos);
 
   // Freight snapshot — only meaningful (and only visible, see data-roles="SuperAdmin" on the
   // container) for a Super Admin, so a DO Dispatch login never sees freight numbers here.
@@ -434,6 +430,33 @@ function renderDashboard(data) {
   renderTrendChart(data.trend || []);
   renderYardChart(data.yardStock || []);
   renderYardMaterialChart(data.yardMaterialOut || []);
+}
+
+/** The 6 DO-status KPI cards, computed from whatever DO subset is passed in — called once with
+ * every DO at initial load, and again from renderDoTable() with the Source/Mode/Area/DO-Date
+ * filtered subset every time those filters change (deliberately NOT the Status filter itself —
+ * applying that too would leave only one status bucket ever nonzero, defeating the point of a
+ * breakdown). Today's Trips is untouched here — it's Dispatch_Log-derived, not DO-derived, so
+ * it stays whatever getDashboard() last reported (see LAST_DASHBOARD_SUMMARY). */
+function renderDoKpis(dos) {
+  const activeCount = dos.filter(d => d.ComputedStatus === 'Active').length;
+  const expiringSoonCount = dos.filter(d => d.ComputedStatus === 'Expiring Soon').length;
+  const expiredCount = dos.filter(d => d.ComputedStatus === 'Expired').length;
+  const completedCount = dos.filter(d => d.ComputedStatus === 'Completed').length;
+  const soldCount = dos.filter(d => d.ComputedStatus === 'Sold').length;
+  const totalBalanceQty = round2ish(dos.reduce((sum, d) =>
+    sum + ((d.ComputedStatus === 'Active' || d.ComputedStatus === 'Expiring Soon') ? (Number(d.Balance) || 0) : 0), 0));
+  const s = LAST_DASHBOARD_SUMMARY || {};
+
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="card active"><div class="num">${activeCount}</div><div class="label">Active DOs</div></div>
+    <div class="card expiring"><div class="num">${expiringSoonCount}</div><div class="label">Expiring Soon</div></div>
+    <div class="card expired"><div class="num">${expiredCount}</div><div class="label">Expired (unfulfilled)</div></div>
+    <div class="card"><div class="num">${completedCount}</div><div class="label">Completed</div></div>
+    <div class="card"><div class="num">${soldCount}</div><div class="label">Sold</div></div>
+    <div class="card"><div class="num">${fmtNum(totalBalanceQty)}</div><div class="label">Total Balance Qty (MT)</div></div>
+    <div class="card"><div class="num">${s.todayTripCount || 0}</div><div class="label">Today's Trips (${fmtNum(s.todayQty || 0)} MT)</div></div>
+  `;
 }
 
 /** Dashboard "Yard Stock" table — Opening/In/Out/Closing balance per yard for the picked date
@@ -490,12 +513,13 @@ function renderDoTable() {
     return true;
   };
 
-  const rows = LAST_DOS_SORTED.filter(d =>
-    (!source || d.Source === source) &&
-    (!mode || d.Mode === mode) &&
-    (!area || d.Area === area) &&
-    matchesStatus(d) && matchesDate(d)
-  );
+  const matchesCommon = d => (!source || d.Source === source) && (!mode || d.Mode === mode) && (!area || d.Area === area) && matchesDate(d);
+
+  const rows = LAST_DOS_SORTED.filter(d => matchesCommon(d) && matchesStatus(d));
+
+  // KPI cards react to Source/Mode/Area/DO-Date same as the table — but deliberately NOT the
+  // Status filter, since the cards ARE the status breakdown (see renderDoKpis).
+  renderDoKpis(LAST_DOS_SORTED.filter(matchesCommon));
 
   const tbody = document.querySelector('#doTable tbody');
   tbody.innerHTML = rows.map(d => `
